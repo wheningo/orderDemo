@@ -8,14 +8,12 @@ import jakarta.persistence.*;
  * @date 2025/3/12 17:00
  * @since 1.0
  **/
-@Entity
+@Entity(name = "orders")
 public record Order(
-        @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-        Long id,
+        @Id @GeneratedValue(strategy = GenerationType.IDENTITY) Long id,
         String productName,
         int quantity,
-        OrderState state,
-
+        @Convert(converter = OrderStateConverter.class) OrderState state,
         @Version Long version
 ) {}
- 
+

@@ -6,10 +6,10 @@ package com.example.orderdemo.model;
  * @date 2025/3/13 09:45
  * @since 1.0
  **/
-public final class Created implements OrderState {
+public final class Confirmed implements OrderState {
     @Override
     public String getDescription() {
-        return "CREATED";
+        return "CONFIRMED";
     }
 }
  
