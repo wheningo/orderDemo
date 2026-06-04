@@ -12,6 +12,7 @@ public class Order {
     private int quantity;
     private OrderState state;
     private long version;
+    private String idempotencyKey;
     private final List<OrderEvent> domainEvents = new ArrayList<>();
 
     private Order() {}
@@ -21,6 +22,7 @@ public class Order {
         order.productName = cmd.productName();
         order.quantity = cmd.quantity();
         order.state = OrderState.Created.INSTANCE;
+        order.idempotencyKey = cmd.idempotencyKey();
         order.domainEvents.add(new OrderEvent.OrderCreated(
                 order.id, cmd.productName(), cmd.quantity(), Instant.now()));
         return order;
@@ -53,13 +55,15 @@ public class Order {
         domainEvents.add(new OrderEvent.OrderCancelled(id, cmd.reason(), Instant.now()));
     }
 
-    public static Order reconstitute(OrderId id, String productName, int quantity, OrderState state, long version) {
+    public static Order reconstitute(OrderId id, String productName, int quantity,
+                                      OrderState state, long version, String idempotencyKey) {
         var order = new Order();
         order.id = id;
         order.productName = productName;
         order.quantity = quantity;
         order.state = state;
         order.version = version;
+        order.idempotencyKey = idempotencyKey;
         return order;
     }
 
@@ -73,6 +77,7 @@ public class Order {
     public int quantity() { return quantity; }
     public OrderState state() { return state; }
     public long version() { return version; }
+    public String idempotencyKey() { return idempotencyKey; }
 
     public List<OrderEvent> domainEvents() {
         return Collections.unmodifiableList(domainEvents);
