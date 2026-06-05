@@ -8,6 +8,9 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema.sql
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
 mybatis:
   configuration:
