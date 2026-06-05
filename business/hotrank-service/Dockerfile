@@ -3,7 +3,7 @@ WORKDIR /app
 COPY pom.xml .
 COPY src ./src
 RUN apt-get update && apt-get install -y maven && \
-    mvn package -DskipTests -q
+    mvn package -DskipTests -Dprotobuf.skip=true -q
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
