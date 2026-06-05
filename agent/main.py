@@ -12,10 +12,10 @@ def health():
 
 
 @app.post("/trigger")
-def trigger(state: dict | None = None):
+def trigger(region: str = "CN"):
     """Manually trigger one agent loop cycle."""
     graph = get_compiled_graph()
-    initial: AgentState = state or {"top_k": []}
+    initial: AgentState = {"region": region, "top_k": []}
     result = graph.invoke(initial)
     return result
 

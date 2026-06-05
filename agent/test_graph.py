@@ -1,24 +1,33 @@
 """Tests for the agent loop graph."""
 
+from unittest.mock import patch
 from graph import AgentState, build_graph, get_compiled_graph, observe, decide, dispatch, verify
 
 
-def test_observe_returns_top_k():
-    state: AgentState = {"top_k": [{"content_id": "c1", "score": 100}]}
-    result = observe(state)
-    assert result["top_k"] == [{"content_id": "c1", "score": 100}]
+def test_observe_calls_mcp():
+    with patch("graph.get_hot_rank", return_value=[{"contentId": "c1", "score": 100}]):
+        state: AgentState = {"region": "CN"}
+        result = observe(state)
+        assert result["top_k"] == [{"contentId": "c1", "score": 100}]
+
+
+def test_observe_falls_back_on_error():
+    with patch("graph.get_hot_rank", side_effect=Exception("network error")):
+        state: AgentState = {"region": "CN", "top_k": [{"contentId": "c1", "score": 50}]}
+        result = observe(state)
+        assert result["top_k"] == [{"contentId": "c1", "score": 50}]
 
 
 def test_decide_picks_lowest_ranked():
     state: AgentState = {
         "top_k": [
-            {"content_id": "c1", "score": 100},
-            {"content_id": "c2", "score": 50},
+            {"contentId": "c1", "score": 100},
+            {"contentId": "c2", "score": 50},
         ]
     }
     result = decide(state)
     assert result["decision"] is not None
-    assert result["decision"]["target"]["content_id"] == "c2"
+    assert result["decision"]["target"]["contentId"] == "c2"
 
 
 def test_decide_returns_none_when_empty():
@@ -27,10 +36,14 @@ def test_decide_returns_none_when_empty():
     assert result["decision"] is None
 
 
-def test_dispatch_sends_when_decision_exists():
-    state: AgentState = {"decision": {"target": {"content_id": "c1"}, "weight": 10}}
-    result = dispatch(state)
-    assert result["dispatched_cmd"]["sent"] is True
+def test_dispatch_calls_mcp():
+    with patch("graph.dispatch_boost_exposure", return_value={"Accepted": True, "IdempotencyKey": "k1"}):
+        state: AgentState = {
+            "decision": {"target": {"contentId": "c1"}, "weight": 10},
+            "region": "CN",
+        }
+        result = dispatch(state)
+        assert result["dispatched_cmd"]["sent"] is True
 
 
 def test_dispatch_skips_when_no_decision():
@@ -39,31 +52,40 @@ def test_dispatch_skips_when_no_decision():
     assert result["dispatched_cmd"] is None
 
 
-def test_verify_observes_effect():
-    state: AgentState = {"dispatched_cmd": {"sent": True}}
-    result = verify(state)
-    assert result["effect"]["observed"] is True
-    assert result["replan"] is False
+def test_dispatch_handles_error():
+    with patch("graph.dispatch_boost_exposure", side_effect=Exception("timeout")):
+        state: AgentState = {
+            "decision": {"target": {"contentId": "c1"}, "weight": 10},
+            "region": "CN",
+        }
+        result = dispatch(state)
+        assert result["dispatched_cmd"]["sent"] is False
+        assert "timeout" in result["dispatched_cmd"]["error"]
 
 
-def test_full_graph_execution():
-    graph = get_compiled_graph()
-    initial_state: AgentState = {
-        "top_k": [
-            {"content_id": "c1", "score": 100},
-            {"content_id": "c2", "score": 50},
-        ]
-    }
-    result = graph.invoke(initial_state)
-    assert "decision" in result
-    assert "dispatched_cmd" in result
-    assert "effect" in result
-    assert result["dispatched_cmd"]["sent"] is True
+def test_verify_detects_improvement():
+    with patch("graph.get_hot_rank", return_value=[
+        {"contentId": "c1", "score": 110},
+        {"contentId": "c2", "score": 90},
+    ]):
+        state: AgentState = {
+            "region": "CN",
+            "top_k": [
+                {"contentId": "c2", "score": 80},
+                {"contentId": "c1", "score": 100},
+            ],
+            "dispatched_cmd": {"target": {"contentId": "c1"}, "sent": True},
+        }
+        result = verify(state)
+        assert result["effect"]["improved"] is True
 
 
-def test_full_graph_with_empty_rankings():
-    graph = get_compiled_graph()
-    initial_state: AgentState = {"top_k": []}
-    result = graph.invoke(initial_state)
-    assert result["decision"] is None
-    assert result["dispatched_cmd"] is None
+def test_full_graph_with_mocked_mcp():
+    with patch("graph.get_hot_rank", return_value=[
+        {"contentId": "c1", "score": 100},
+        {"contentId": "c2", "score": 50},
+    ]), patch("graph.dispatch_boost_exposure", return_value={"Accepted": True}):
+        graph = get_compiled_graph()
+        result = graph.invoke({"region": "CN"})
+        assert result["dispatched_cmd"]["sent"] is True
+        assert result["effect"] is not None
