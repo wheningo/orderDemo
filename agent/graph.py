@@ -58,12 +58,15 @@ def dispatch(state: AgentState) -> AgentState:
     content_id = target.get("contentId") or target.get("content_id", "")
     region = state.get("region", "CN")
 
+    risk_tier = "high" if decision["weight"] > 50 else "standard"
+
     try:
         result = dispatch_boost_exposure(
             target_content_id=content_id,
             weight=decision["weight"],
             region=region,
             decision_source="agent",
+            risk_tier=risk_tier,
         )
         return {"dispatched_cmd": {"target": target, "weight": decision["weight"], "sent": True, "result": result}}
     except Exception as e:

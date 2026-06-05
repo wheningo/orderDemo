@@ -18,6 +18,7 @@ type BoostParams struct {
 	Region          string `json:"region"`
 	IdempotencyKey  string `json:"idempotency_key,omitempty"`
 	DecisionSource  string `json:"decision_source"`
+	RiskTier        string `json:"risk_tier,omitempty"`
 }
 
 func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *interceptor.Chain, audit *interceptor.AuditInterceptor) {
@@ -45,6 +46,7 @@ func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *intercep
 					Region:          p.Region,
 					IdempotencyKey:  p.IdempotencyKey,
 					DecisionSource:  p.DecisionSource,
+					RiskTier:        p.RiskTier,
 				},
 				Timestamp: time.Now(),
 			}
@@ -68,6 +70,7 @@ func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *intercep
 				"region":          p.Region,
 				"idempotencyKey":  ctx.IdempotencyKey,
 				"decisionSource":  p.DecisionSource,
+				"riskTier":        p.RiskTier,
 			}
 			body, _ := json.Marshal(javaReq)
 

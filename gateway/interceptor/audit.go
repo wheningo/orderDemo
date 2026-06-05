@@ -12,6 +12,7 @@ type AuditEntry struct {
 	Region         string
 	Weight         int32
 	DecisionSource string
+	RiskTier       string
 	Result         string // filled after execution
 }
 
@@ -34,6 +35,7 @@ func (a *AuditInterceptor) Intercept(ctx *CommandContext) error {
 		Region:         ctx.Request.Region,
 		Weight:         ctx.Request.Weight,
 		DecisionSource: ctx.Request.DecisionSource,
+		RiskTier:       ctx.Request.RiskTier,
 	})
 	return nil
 }
@@ -49,6 +51,7 @@ func (a *AuditInterceptor) Record(ctx *CommandContext, result string) {
 		Region:         ctx.Request.Region,
 		Weight:         ctx.Request.Weight,
 		DecisionSource: ctx.Request.DecisionSource,
+		RiskTier:       ctx.Request.RiskTier,
 		Result:         result,
 	})
 }

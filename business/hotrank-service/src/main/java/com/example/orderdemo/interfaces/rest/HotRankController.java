@@ -38,7 +38,8 @@ public class HotRankController {
                     ((Number) body.get("weight")).intValue(),
                     (String) body.get("region"),
                     (String) body.get("idempotencyKey"),
-                    (String) body.get("decisionSource")
+                    (String) body.get("decisionSource"),
+                    (String) body.getOrDefault("riskTier", "standard")
             );
             BoostExposureResult result = boostService.execute(cmd);
             return ResponseEntity.ok(result);

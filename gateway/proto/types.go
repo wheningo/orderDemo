@@ -6,6 +6,7 @@ type BoostExposureRequest struct {
 	Region          string
 	IdempotencyKey  string
 	DecisionSource  string
+	RiskTier        string
 }
 
 type BoostExposureResponse struct {

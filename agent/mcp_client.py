@@ -28,6 +28,7 @@ def dispatch_boost_exposure(
     region: str,
     decision_source: str = "agent",
     idempotency_key: str = "",
+    risk_tier: str = "standard",
 ) -> dict:
     """Dispatch a boost exposure command."""
     return call_tool(
@@ -38,5 +39,6 @@ def dispatch_boost_exposure(
             "region": region,
             "decision_source": decision_source,
             "idempotency_key": idempotency_key,
+            "risk_tier": risk_tier,
         },
     )
