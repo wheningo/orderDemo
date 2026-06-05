@@ -19,9 +19,15 @@ public class HotRankMaterializer implements InteractionEventHandler {
     private static final Duration BUCKET_TTL = Duration.ofMinutes((long) BUCKET_MINUTES * MAX_BUCKETS);
 
     private final StringRedisTemplate redisTemplate;
+    private final HotRankChangeDetector changeDetector;
+    private final HotRankEventPublisher eventPublisher;
 
-    public HotRankMaterializer(StringRedisTemplate redisTemplate) {
+    public HotRankMaterializer(StringRedisTemplate redisTemplate,
+                               HotRankChangeDetector changeDetector,
+                               HotRankEventPublisher eventPublisher) {
         this.redisTemplate = redisTemplate;
+        this.changeDetector = changeDetector;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -30,6 +36,9 @@ public class HotRankMaterializer implements InteractionEventHandler {
         redisTemplate.opsForZSet().incrementScore(key, event.contentId(), event.weight());
         redisTemplate.expire(key, BUCKET_TTL);
         log.debug("Materialized: key={}, contentId={}, weight={}", key, event.contentId(), event.weight());
+
+        changeDetector.detectChanges(event.region())
+                .forEach(eventPublisher::publish);
     }
 
     String buildKey(String region, Instant timestamp) {

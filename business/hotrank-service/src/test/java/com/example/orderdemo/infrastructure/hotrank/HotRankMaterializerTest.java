@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.ZSetOperations;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -16,6 +17,8 @@ class HotRankMaterializerTest {
 
     private StringRedisTemplate redisTemplate;
     private ZSetOperations<String, String> zSetOps;
+    private HotRankChangeDetector changeDetector;
+    private HotRankEventPublisher eventPublisher;
     private HotRankMaterializer materializer;
 
     @SuppressWarnings("unchecked")
@@ -24,7 +27,10 @@ class HotRankMaterializerTest {
         redisTemplate = mock(StringRedisTemplate.class);
         zSetOps = mock(ZSetOperations.class);
         when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
-        materializer = new HotRankMaterializer(redisTemplate);
+        changeDetector = mock(HotRankChangeDetector.class);
+        eventPublisher = mock(HotRankEventPublisher.class);
+        when(changeDetector.detectChanges(anyString())).thenReturn(List.of());
+        materializer = new HotRankMaterializer(redisTemplate, changeDetector, eventPublisher);
     }
 
     @Test
@@ -69,5 +75,13 @@ class HotRankMaterializerTest {
         String key1 = materializer.buildKey("CN", Instant.parse("2026-06-01T10:00:00Z"));
         String key2 = materializer.buildKey("CN", Instant.parse("2026-06-01T10:04:59Z"));
         assertEquals(key1, key2);
+    }
+
+    @Test
+    void triggersChangeDetectionAfterMaterialization() {
+        var event = new InteractionEvent("e3", "content-1", "CN", "LIKE", 1,
+                Instant.parse("2026-06-01T10:03:00Z"));
+        materializer.handle(event);
+        verify(changeDetector).detectChanges("CN");
     }
 }
