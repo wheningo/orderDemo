@@ -48,14 +48,17 @@ class BoostExposureServiceTest {
 
     @Test
     void rejectsWeightTooLow() {
-        assertThrows(IllegalArgumentException.class,
+        var ex = assertThrows(IllegalArgumentException.class,
             () -> new BoostExposureCommand("c-1", 0, "CN", "key", "agent"));
+        // Controller catches this and returns BoostExposureResult.rejected(message, key)
+        assertTrue(ex.getMessage().contains("1") && ex.getMessage().contains("100"));
     }
 
     @Test
     void rejectsWeightTooHigh() {
-        assertThrows(IllegalArgumentException.class,
+        var ex = assertThrows(IllegalArgumentException.class,
             () -> new BoostExposureCommand("c-1", 101, "CN", "key", "agent"));
+        assertTrue(ex.getMessage().contains("1") && ex.getMessage().contains("100"));
     }
 
     @Test

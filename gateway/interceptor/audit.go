@@ -38,6 +38,21 @@ func (a *AuditInterceptor) Intercept(ctx *CommandContext) error {
 	return nil
 }
 
+// Record adds a complete audit entry with the execution result.
+func (a *AuditInterceptor) Record(ctx *CommandContext, result string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.entries = append(a.entries, AuditEntry{
+		Timestamp:      ctx.Timestamp,
+		IdempotencyKey: ctx.IdempotencyKey,
+		ContentId:      ctx.Request.TargetContentId,
+		Region:         ctx.Request.Region,
+		Weight:         ctx.Request.Weight,
+		DecisionSource: ctx.Request.DecisionSource,
+		Result:         result,
+	})
+}
+
 func (a *AuditInterceptor) Entries() []AuditEntry {
 	a.mu.Lock()
 	defer a.mu.Unlock()

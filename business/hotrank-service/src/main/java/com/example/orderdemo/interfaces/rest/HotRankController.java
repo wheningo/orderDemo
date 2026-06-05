@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/hotrank")
@@ -30,8 +31,19 @@ public class HotRankController {
     }
 
     @PostMapping("/boost")
-    public ResponseEntity<BoostExposureResult> boostExposure(@RequestBody BoostExposureCommand cmd) {
-        BoostExposureResult result = boostService.execute(cmd);
-        return ResponseEntity.ok(result);
+    public ResponseEntity<BoostExposureResult> boostExposure(@RequestBody Map<String, Object> body) {
+        try {
+            var cmd = new BoostExposureCommand(
+                    (String) body.get("targetContentId"),
+                    ((Number) body.get("weight")).intValue(),
+                    (String) body.get("region"),
+                    (String) body.get("idempotencyKey"),
+                    (String) body.get("decisionSource")
+            );
+            BoostExposureResult result = boostService.execute(cmd);
+            return ResponseEntity.ok(result);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(BoostExposureResult.rejected(e.getMessage(), (String) body.get("idempotencyKey")));
+        }
     }
 }

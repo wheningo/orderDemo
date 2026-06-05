@@ -26,14 +26,14 @@ func TestBoostToolCallsJavaAfterInterceptors(t *testing.T) {
 	}))
 	defer javaServer.Close()
 
+	audit := interceptor.NewAuditInterceptor()
 	chain := interceptor.NewChain(
 		interceptor.NewIdempotencyInterceptor(),
 		interceptor.NewRateLimitInterceptor(100, 100),
-		interceptor.NewAuditInterceptor(),
 	)
 
 	server := NewServer()
-	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: javaServer.URL}, chain)
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: javaServer.URL}, chain, audit)
 
 	params, _ := json.Marshal(BoostParams{
 		TargetContentId: "c-1",
@@ -57,12 +57,13 @@ func TestBoostToolCallsJavaAfterInterceptors(t *testing.T) {
 }
 
 func TestBoostToolRejectsWhenRateLimited(t *testing.T) {
+	audit := interceptor.NewAuditInterceptor()
 	chain := interceptor.NewChain(
 		interceptor.NewRateLimitInterceptor(1, 0), // 0 burst = immediate limit
 	)
 
 	server := NewServer()
-	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://should-not-be-called"}, chain)
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://should-not-be-called"}, chain, audit)
 
 	params, _ := json.Marshal(BoostParams{
 		TargetContentId: "c-1",
@@ -86,9 +87,10 @@ func TestBoostToolRejectsWhenRateLimited(t *testing.T) {
 }
 
 func TestBoostToolRejectsEmptyContentId(t *testing.T) {
+	audit := interceptor.NewAuditInterceptor()
 	chain := interceptor.NewChain()
 	server := NewServer()
-	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://unused"}, chain)
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://unused"}, chain, audit)
 
 	params, _ := json.Marshal(BoostParams{Region: "CN", Weight: 10})
 	_, err := server.CallTool("dispatch_boost_exposure", params)
@@ -98,13 +100,79 @@ func TestBoostToolRejectsEmptyContentId(t *testing.T) {
 }
 
 func TestBoostToolRejectsEmptyRegion(t *testing.T) {
+	audit := interceptor.NewAuditInterceptor()
 	chain := interceptor.NewChain()
 	server := NewServer()
-	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://unused"}, chain)
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://unused"}, chain, audit)
 
 	params, _ := json.Marshal(BoostParams{TargetContentId: "c-1", Weight: 10})
 	_, err := server.CallTool("dispatch_boost_exposure", params)
 	if err == nil {
 		t.Fatal("expected error for empty region")
+	}
+}
+
+func TestBoostToolAuditsRejectedCommands(t *testing.T) {
+	audit := interceptor.NewAuditInterceptor()
+	chain := interceptor.NewChain(
+		interceptor.NewIdempotencyInterceptor(),
+		interceptor.NewRateLimitInterceptor(1, 0), // immediate reject
+	)
+
+	server := NewServer()
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: "http://unused"}, chain, audit)
+
+	params, _ := json.Marshal(BoostParams{
+		TargetContentId: "c-1",
+		Weight:          10,
+		Region:          "CN",
+		DecisionSource:  "agent",
+	})
+
+	server.CallTool("dispatch_boost_exposure", params)
+
+	entries := audit.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %d", len(entries))
+	}
+	if entries[0].Result == "" {
+		t.Fatal("expected audit result to be filled")
+	}
+	if entries[0].ContentId != "c-1" {
+		t.Fatalf("expected content 'c-1', got '%s'", entries[0].ContentId)
+	}
+}
+
+func TestBoostToolAuditsAcceptedCommands(t *testing.T) {
+	javaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"accepted":true,"reason":"","idempotencyKey":"k1"}`)
+	}))
+	defer javaServer.Close()
+
+	audit := interceptor.NewAuditInterceptor()
+	chain := interceptor.NewChain(
+		interceptor.NewIdempotencyInterceptor(),
+		interceptor.NewRateLimitInterceptor(100, 100),
+	)
+
+	server := NewServer()
+	RegisterBoostTool(server, HotRankToolConfig{JavaServiceURL: javaServer.URL}, chain, audit)
+
+	params, _ := json.Marshal(BoostParams{
+		TargetContentId: "c-2",
+		Weight:          15,
+		Region:          "US",
+		DecisionSource:  "agent",
+	})
+
+	server.CallTool("dispatch_boost_exposure", params)
+
+	entries := audit.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 audit entry, got %d", len(entries))
+	}
+	if entries[0].Result != "ACCEPTED" {
+		t.Fatalf("expected 'ACCEPTED', got '%s'", entries[0].Result)
 	}
 }
