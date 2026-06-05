@@ -1,0 +1,23 @@
+# Java
+business/hotrank-service/target/
+*.class
+*.jar
+
+# Go
+gateway/gateway
+
+# Python
+agent/__pycache__/
+agent/.venv/
+*.pyc
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Logs
+logs/
+
+# OS
+.DS_Store
