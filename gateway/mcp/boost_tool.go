@@ -18,9 +18,10 @@ type BoostParams struct {
 	Region          string `json:"region"`
 	IdempotencyKey  string `json:"idempotency_key,omitempty"`
 	DecisionSource  string `json:"decision_source"`
+	RiskTier        string `json:"risk_tier,omitempty"`
 }
 
-func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *interceptor.Chain) {
+func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *interceptor.Chain, audit *interceptor.AuditInterceptor) {
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	server.RegisterTool(Tool{
@@ -45,16 +46,21 @@ func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *intercep
 					Region:          p.Region,
 					IdempotencyKey:  p.IdempotencyKey,
 					DecisionSource:  p.DecisionSource,
+					RiskTier:        p.RiskTier,
 				},
 				Timestamp: time.Now(),
 			}
 
+			// Run interceptor chain (idempotency + ratelimit)
 			if err := chain.Execute(ctx); err != nil {
-				return proto.BoostExposureResponse{
+				result := proto.BoostExposureResponse{
 					Accepted:       false,
 					Reason:         err.Error(),
 					IdempotencyKey: ctx.IdempotencyKey,
-				}, nil
+				}
+				// Audit records ALL commands including rejected ones
+				audit.Record(ctx, "REJECTED:"+err.Error())
+				return result, nil
 			}
 
 			// Forward to Java
@@ -64,30 +70,42 @@ func RegisterBoostTool(server *Server, config HotRankToolConfig, chain *intercep
 				"region":          p.Region,
 				"idempotencyKey":  ctx.IdempotencyKey,
 				"decisionSource":  p.DecisionSource,
+				"riskTier":        p.RiskTier,
 			}
 			body, _ := json.Marshal(javaReq)
 
 			url := config.JavaServiceURL + "/hotrank/boost"
 			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 			if err != nil {
-				return proto.BoostExposureResponse{
+				result := proto.BoostExposureResponse{
 					Accepted:       false,
 					Reason:         fmt.Sprintf("failed to reach backend: %v", err),
 					IdempotencyKey: ctx.IdempotencyKey,
-				}, nil
+				}
+				audit.Record(ctx, "ERROR:backend_unreachable")
+				return result, nil
 			}
 			defer resp.Body.Close()
 
 			respBody, _ := io.ReadAll(resp.Body)
 			var result proto.BoostExposureResponse
 			if err := json.Unmarshal(respBody, &result); err != nil {
-				return proto.BoostExposureResponse{
+				result = proto.BoostExposureResponse{
 					Accepted:       false,
 					Reason:         fmt.Sprintf("invalid response from backend: %s", string(respBody)),
 					IdempotencyKey: ctx.IdempotencyKey,
-				}, nil
+				}
+				audit.Record(ctx, "ERROR:invalid_backend_response")
+				return result, nil
 			}
 			result.IdempotencyKey = ctx.IdempotencyKey
+
+			// Audit with actual result
+			if result.Accepted {
+				audit.Record(ctx, "ACCEPTED")
+			} else {
+				audit.Record(ctx, "REJECTED_BY_DOMAIN:"+result.Reason)
+			}
 			return result, nil
 		},
 	})

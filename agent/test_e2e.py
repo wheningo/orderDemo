@@ -92,6 +92,7 @@ class TestPropertyAssertions:
                     "region": "CN",
                     "decision_source": "agent",
                     "idempotency_key": "",
+                    "risk_tier": "standard",
                 },
             )
 

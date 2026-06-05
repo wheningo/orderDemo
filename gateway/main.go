@@ -16,18 +16,19 @@ func main() {
 		javaURL = "http://localhost:8080"
 	}
 
-	// Build interceptor chain
+	audit := interceptor.NewAuditInterceptor()
+
+	// Chain: idempotency → ratelimit (audit is external, wraps the whole flow)
 	chain := interceptor.NewChain(
 		interceptor.NewIdempotencyInterceptor(),
 		interceptor.NewRateLimitInterceptor(10, 20),
-		interceptor.NewAuditInterceptor(),
 	)
 
 	// Build MCP server with tools
 	mcpServer := mcp.NewServer()
 	config := mcp.HotRankToolConfig{JavaServiceURL: javaURL}
 	mcp.RegisterHotRankTools(mcpServer, config)
-	mcp.RegisterBoostTool(mcpServer, config, chain)
+	mcp.RegisterBoostTool(mcpServer, config, chain, audit)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)

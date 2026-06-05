@@ -5,7 +5,8 @@ public record BoostExposureCommand(
     int weight,
     String region,
     String idempotencyKey,
-    String decisionSource
+    String decisionSource,
+    String riskTier
 ) {
     public BoostExposureCommand {
         if (weight < 1 || weight > 100) {

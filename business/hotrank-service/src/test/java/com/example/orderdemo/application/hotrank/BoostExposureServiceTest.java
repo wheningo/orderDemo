@@ -27,7 +27,7 @@ class BoostExposureServiceTest {
     @Test
     void acceptsValidBoostCommand() {
         when(dedup.isDuplicate("key-1")).thenReturn(false);
-        var cmd = new BoostExposureCommand("content-1", 10, "CN", "key-1", "agent");
+        var cmd = new BoostExposureCommand("content-1", 10, "CN", "key-1", "agent", "standard");
         BoostExposureResult result = service.execute(cmd);
 
         assertTrue(result.accepted());
@@ -38,7 +38,7 @@ class BoostExposureServiceTest {
     @Test
     void rejectsDuplicateCommand() {
         when(dedup.isDuplicate("key-dup")).thenReturn(true);
-        var cmd = new BoostExposureCommand("content-1", 10, "CN", "key-dup", "agent");
+        var cmd = new BoostExposureCommand("content-1", 10, "CN", "key-dup", "agent", "standard");
         BoostExposureResult result = service.execute(cmd);
 
         assertTrue(result.accepted());
@@ -48,20 +48,23 @@ class BoostExposureServiceTest {
 
     @Test
     void rejectsWeightTooLow() {
-        assertThrows(IllegalArgumentException.class,
-            () -> new BoostExposureCommand("c-1", 0, "CN", "key", "agent"));
+        var ex = assertThrows(IllegalArgumentException.class,
+            () -> new BoostExposureCommand("c-1", 0, "CN", "key", "agent", "standard"));
+        // Controller catches this and returns BoostExposureResult.rejected(message, key)
+        assertTrue(ex.getMessage().contains("1") && ex.getMessage().contains("100"));
     }
 
     @Test
     void rejectsWeightTooHigh() {
-        assertThrows(IllegalArgumentException.class,
-            () -> new BoostExposureCommand("c-1", 101, "CN", "key", "agent"));
+        var ex = assertThrows(IllegalArgumentException.class,
+            () -> new BoostExposureCommand("c-1", 101, "CN", "key", "agent", "standard"));
+        assertTrue(ex.getMessage().contains("1") && ex.getMessage().contains("100"));
     }
 
     @Test
     void passesCorrectDataToMaterializer() {
         when(dedup.isDuplicate("key-2")).thenReturn(false);
-        var cmd = new BoostExposureCommand("target-x", 25, "US", "key-2", "manual");
+        var cmd = new BoostExposureCommand("target-x", 25, "US", "key-2", "manual", "standard");
         service.execute(cmd);
 
         verify(materializer).handle(argThat(event ->

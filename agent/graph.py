@@ -27,11 +27,25 @@ def observe(state: AgentState) -> AgentState:
 def decide(state: AgentState) -> AgentState:
     """Pick a target to boost based on current rankings."""
     top_k = state.get("top_k", [])
-    if top_k:
-        # Strategy: boost the lowest-ranked item in top-K to shake things up
-        target = top_k[-1]
-        return {"decision": {"target": target, "weight": 10}}
-    return {"decision": None}
+    if not top_k:
+        return {"decision": None}
+
+    # Strategy: boost the lowest-ranked item
+    target = top_k[-1]
+    top_score = top_k[0].get("score", 0) if top_k else 0
+    target_score = target.get("score", 0)
+
+    # Aggressive strategy: if gap is large, try a large weight
+    # This will be rejected by the domain if > 100 — demonstrating the "wall"
+    gap = top_score - target_score
+    if gap > 200:
+        weight = int(gap * 0.8)  # likely > 100, domain will reject
+    elif gap > 50:
+        weight = min(int(gap * 0.5), 100)
+    else:
+        weight = 10
+
+    return {"decision": {"target": target, "weight": weight}}
 
 
 def dispatch(state: AgentState) -> AgentState:
@@ -44,12 +58,15 @@ def dispatch(state: AgentState) -> AgentState:
     content_id = target.get("contentId") or target.get("content_id", "")
     region = state.get("region", "CN")
 
+    risk_tier = "high" if decision["weight"] > 50 else "standard"
+
     try:
         result = dispatch_boost_exposure(
             target_content_id=content_id,
             weight=decision["weight"],
             region=region,
             decision_source="agent",
+            risk_tier=risk_tier,
         )
         return {"dispatched_cmd": {"target": target, "weight": decision["weight"], "sent": True, "result": result}}
     except Exception as e:

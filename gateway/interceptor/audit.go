@@ -12,6 +12,7 @@ type AuditEntry struct {
 	Region         string
 	Weight         int32
 	DecisionSource string
+	RiskTier       string
 	Result         string // filled after execution
 }
 
@@ -34,8 +35,25 @@ func (a *AuditInterceptor) Intercept(ctx *CommandContext) error {
 		Region:         ctx.Request.Region,
 		Weight:         ctx.Request.Weight,
 		DecisionSource: ctx.Request.DecisionSource,
+		RiskTier:       ctx.Request.RiskTier,
 	})
 	return nil
+}
+
+// Record adds a complete audit entry with the execution result.
+func (a *AuditInterceptor) Record(ctx *CommandContext, result string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.entries = append(a.entries, AuditEntry{
+		Timestamp:      ctx.Timestamp,
+		IdempotencyKey: ctx.IdempotencyKey,
+		ContentId:      ctx.Request.TargetContentId,
+		Region:         ctx.Request.Region,
+		Weight:         ctx.Request.Weight,
+		DecisionSource: ctx.Request.DecisionSource,
+		RiskTier:       ctx.Request.RiskTier,
+		Result:         result,
+	})
 }
 
 func (a *AuditInterceptor) Entries() []AuditEntry {

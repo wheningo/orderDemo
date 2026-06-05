@@ -41,8 +41,8 @@ public class BoostExposureService {
         );
 
         materializer.handle(syntheticEvent);
-        log.info("Boost applied: contentId={}, weight={}, region={}, source={}",
-                cmd.targetContentId(), cmd.weight(), cmd.region(), cmd.decisionSource());
+        log.info("Boost applied: contentId={}, weight={}, region={}, source={}, riskTier={}",
+                cmd.targetContentId(), cmd.weight(), cmd.region(), cmd.decisionSource(), cmd.riskTier());
         return BoostExposureResult.accepted(cmd.idempotencyKey());
     }
 }
