@@ -28,6 +28,33 @@ def test_decide_picks_lowest_ranked():
     result = decide(state)
     assert result["decision"] is not None
     assert result["decision"]["target"]["contentId"] == "c2"
+    assert result["decision"]["weight"] > 0
+
+
+def test_decide_produces_aggressive_weight_for_large_gap():
+    """When score gap is large, decide produces weight > 100 (domain will reject)."""
+    state: AgentState = {
+        "top_k": [
+            {"contentId": "c1", "score": 500},
+            {"contentId": "c2", "score": 100},
+        ]
+    }
+    result = decide(state)
+    assert result["decision"] is not None
+    assert result["decision"]["weight"] > 100  # 400 * 0.8 = 320
+
+
+def test_decide_moderate_weight_for_medium_gap():
+    """Medium gap produces weight within bounds."""
+    state: AgentState = {
+        "top_k": [
+            {"contentId": "c1", "score": 150},
+            {"contentId": "c2", "score": 80},
+        ]
+    }
+    result = decide(state)
+    assert result["decision"]["weight"] <= 100
+    assert result["decision"]["weight"] > 10
 
 
 def test_decide_returns_none_when_empty():
