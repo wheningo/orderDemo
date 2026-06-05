@@ -16,3 +16,4 @@ public sealed interface OrderCommand {
 
     record CancelOrder(OrderId orderId, String reason, String idempotencyKey) implements OrderCommand {}
 }
+
