@@ -29,6 +29,7 @@ func main() {
 	config := mcp.HotRankToolConfig{JavaServiceURL: javaURL}
 	mcp.RegisterHotRankTools(mcpServer, config)
 	mcp.RegisterBoostTool(mcpServer, config, chain, audit)
+	mcp.RegisterInventoryTool(mcpServer, config, chain, audit)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
