@@ -1,5 +1,7 @@
 # Java
 business/hotrank-service/target/
+business/contracts/target/
+target/
 *.class
 *.jar
 
@@ -21,3 +23,10 @@ logs/
 
 # OS
 .DS_Store
+
+# Seata TC session
+sessionStore/
+
+# Misc
+.claire/
+HELP.md
