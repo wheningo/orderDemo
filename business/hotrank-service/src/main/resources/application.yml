@@ -32,6 +32,7 @@ mybatis:
 
 seata:
   enabled: true
+  enable-auto-data-source-proxy: false
   application-id: hotrank-service
   tx-service-group: hotrank-tx-group
   service:

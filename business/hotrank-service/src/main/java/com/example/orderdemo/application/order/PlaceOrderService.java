@@ -1,6 +1,7 @@
 package com.example.orderdemo.application.order;
 
 import com.example.orderdemo.application.inventory.InventoryTccAction;
+import io.seata.core.context.RootContext;
 import io.seata.spring.annotation.GlobalTransactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +22,8 @@ public class PlaceOrderService {
 
     @GlobalTransactional(name = "place-order", rollbackFor = Exception.class)
     public PlaceOrderResult placeOrder(String productName, int quantity, String sku) {
-        log.info("PlaceOrder started: product={}, qty={}, sku={}", productName, quantity, sku);
+        String xid = RootContext.getXID();
+        log.info("PlaceOrder started: product={}, qty={}, sku={}, xid={}", productName, quantity, sku, xid);
 
         boolean orderOk = orderTccAction.tryCreate(null, productName, quantity);
         if (!orderOk) {
@@ -33,7 +35,7 @@ public class PlaceOrderService {
             throw new OversellRejectedException("Inventory reservation failed for sku=" + sku + ", qty=" + quantity);
         }
 
-        log.info("PlaceOrder try phase complete, global commit pending: product={}, qty={}", productName, quantity);
-        return PlaceOrderResult.success(null, null);
+        log.info("PlaceOrder try phase complete, global commit pending: product={}, qty={}, xid={}", productName, quantity, xid);
+        return PlaceOrderResult.success(null, xid);
     }
 }

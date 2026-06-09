@@ -2,6 +2,7 @@ package com.example.orderdemo.interfaces.rest;
 
 import com.example.orderdemo.application.order.DuplicateCommandException;
 import com.example.orderdemo.application.order.OrderNotFoundException;
+import com.example.orderdemo.application.order.OversellRejectedException;
 import com.example.orderdemo.domain.order.InvariantViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -35,6 +36,14 @@ public class GlobalExceptionHandler {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.OK, ex.getMessage());
         problem.setTitle("Duplicate Command");
         problem.setProperty("idempotencyKey", ex.idempotencyKey());
+        return problem;
+    }
+
+    @ExceptionHandler(OversellRejectedException.class)
+    public ProblemDetail handleOversellRejected(OversellRejectedException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Oversell Rejected");
+        problem.setProperty("retryable", false);
         return problem;
     }
 
