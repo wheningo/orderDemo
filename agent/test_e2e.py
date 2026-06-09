@@ -94,7 +94,7 @@ class TestPropertyAssertions:
         public_tools = [name for name in dir(mcp_client)
                         if not name.startswith("_") and callable(getattr(mcp_client, name))
                         and name not in ("call_tool",)]
-        assert set(public_tools) == {"get_hot_rank", "dispatch_boost_exposure"}
+        assert set(public_tools) == {"get_hot_rank", "dispatch_boost_exposure", "allocate_promo_stock"}
 
     def test_dispatch_always_goes_through_call_tool(self):
         """Every dispatch goes through call_tool which hits the gateway (interceptor chain)."""

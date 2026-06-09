@@ -42,3 +42,23 @@ def dispatch_boost_exposure(
             "risk_tier": risk_tier,
         },
     )
+
+
+def allocate_promo_stock(
+    sku: str,
+    qty: int,
+    region: str = "CN",
+    risk_tier: str = "standard",
+    idempotency_key: str = "",
+) -> dict:
+    """Allocate promotional stock for a SKU."""
+    return call_tool(
+        "allocate_promo_stock",
+        {
+            "sku": sku,
+            "qty": qty,
+            "region": region,
+            "risk_tier": risk_tier,
+            "idempotency_key": idempotency_key,
+        },
+    )
