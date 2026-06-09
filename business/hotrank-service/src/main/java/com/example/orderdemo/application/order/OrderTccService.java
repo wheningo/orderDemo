@@ -4,6 +4,7 @@ import com.example.orderdemo.domain.order.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -17,7 +18,7 @@ public class OrderTccService {
         this.orderRepository = orderRepository;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public OrderId tryCreate(String txKey, String productName, int quantity) {
         var cmd = new OrderCommand.PlaceOrder(productName, quantity, txKey);
         var order = Order.createPending(cmd);
@@ -26,7 +27,7 @@ public class OrderTccService {
         return order.id();
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void confirm(OrderId orderId) {
         var order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {
@@ -42,7 +43,7 @@ public class OrderTccService {
         log.info("TCC Confirm: order confirmed, id={}", orderId.value());
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancel(OrderId orderId) {
         var order = orderRepository.findById(orderId).orElse(null);
         if (order == null) {

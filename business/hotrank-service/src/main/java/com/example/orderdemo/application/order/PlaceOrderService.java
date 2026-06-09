@@ -6,7 +6,6 @@ import com.example.orderdemo.domain.order.OrderId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -23,12 +22,14 @@ public class PlaceOrderService {
         this.inventoryTccService = inventoryTccService;
     }
 
-    @Transactional
+    // When Seata TC is available, add @GlobalTransactional here.
+    // Without TC, this manual coordination works because each branch
+    // runs in its own REQUIRES_NEW transaction.
     public PlaceOrderResult placeOrder(String productName, int quantity, String sku) {
         String txKey = UUID.randomUUID().toString();
         log.info("PlaceOrder started: product={}, qty={}, sku={}, txKey={}", productName, quantity, sku, txKey);
 
-        // Phase 1: Try
+        // Phase 1: Try (each in its own transaction)
         OrderId orderId = null;
         CommandResult inventoryResult;
         try {
@@ -40,14 +41,13 @@ public class PlaceOrderService {
             return PlaceOrderResult.failed("Try phase failed: " + e.getMessage());
         }
 
-        // Check inventory result
         if (!inventoryResult.accepted()) {
             log.warn("Inventory try rejected: {}", inventoryResult.reason());
             cancelAll(txKey, orderId);
             return PlaceOrderResult.failed(inventoryResult.reason());
         }
 
-        // Phase 2: Confirm
+        // Phase 2: Confirm (each in its own transaction)
         try {
             orderTccService.confirm(orderId);
             inventoryTccService.confirm(txKey);

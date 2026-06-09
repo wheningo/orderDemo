@@ -10,6 +10,7 @@ import com.example.orderdemo.infrastructure.persistence.ReservationMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -30,7 +31,7 @@ public class InventoryTccService {
         this.outboxWriter = outboxWriter;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public CommandResult tryReserve(String txKey, String sku, int qty) {
         var existing = reservationMapper.findByTxKey(txKey);
         if (existing.isPresent()) {
@@ -57,7 +58,7 @@ public class InventoryTccService {
         }
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void confirm(String txKey) {
         var existing = reservationMapper.findByTxKey(txKey);
         if (existing.isEmpty()) {
@@ -79,7 +80,7 @@ public class InventoryTccService {
         log.info("TCC Confirm: sku={}, qty={}, txKey={}", res.getSku(), res.getQty(), txKey);
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void cancel(String txKey) {
         var existing = reservationMapper.findByTxKey(txKey);
         if (existing.isEmpty()) {
