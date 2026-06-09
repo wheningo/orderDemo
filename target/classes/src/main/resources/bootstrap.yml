@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: order-demo
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+      config:
+        server-addr: localhost:8848
+        file-extension: yaml
+    alibaba:
+      seata:
+        tx-service-group: order-demo-tx-group

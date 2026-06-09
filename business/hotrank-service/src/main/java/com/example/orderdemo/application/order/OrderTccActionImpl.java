@@ -22,6 +22,7 @@ public class OrderTccActionImpl implements OrderTccAction {
         String txKey = ctx.getXid() + ":" + ctx.getBranchId();
         OrderId orderId = orderTccService.tryCreate(txKey, productName, quantity);
         ctx.addActionContext("orderId", orderId.value().toString());
+        OrderIdHolder.set(orderId);
         return true;
     }
 

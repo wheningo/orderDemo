@@ -25,17 +25,23 @@ public class PlaceOrderService {
         String xid = RootContext.getXID();
         log.info("PlaceOrder started: product={}, qty={}, sku={}, xid={}", productName, quantity, sku, xid);
 
-        boolean orderOk = orderTccAction.tryCreate(null, productName, quantity);
-        if (!orderOk) {
-            throw new RuntimeException("Order try failed");
-        }
+        try {
+            boolean orderOk = orderTccAction.tryCreate(null, productName, quantity);
+            if (!orderOk) {
+                throw new RuntimeException("Order try failed");
+            }
 
-        boolean inventoryOk = inventoryTccAction.tryReserve(null, sku, quantity);
-        if (!inventoryOk) {
-            throw new OversellRejectedException("Inventory reservation failed for sku=" + sku + ", qty=" + quantity);
-        }
+            boolean inventoryOk = inventoryTccAction.tryReserve(null, sku, quantity);
+            if (!inventoryOk) {
+                throw new OversellRejectedException("Inventory reservation failed for sku=" + sku + ", qty=" + quantity);
+            }
 
-        log.info("PlaceOrder try phase complete, global commit pending: product={}, qty={}, xid={}", productName, quantity, xid);
-        return PlaceOrderResult.success(null, xid);
+            var orderId = OrderIdHolder.get();
+            log.info("PlaceOrder try phase complete, global commit pending: product={}, qty={}, xid={}, orderId={}",
+                    productName, quantity, xid, orderId != null ? orderId.value() : "null");
+            return PlaceOrderResult.success(orderId, xid);
+        } finally {
+            OrderIdHolder.clear();
+        }
     }
 }
