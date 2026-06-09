@@ -30,6 +30,20 @@ mybatis:
   configuration:
     map-underscore-to-camel-case: true
 
+seata:
+  enabled: true
+  application-id: hotrank-service
+  tx-service-group: hotrank-tx-group
+  service:
+    vgroup-mapping:
+      hotrank-tx-group: default
+    grouplist:
+      default: 127.0.0.1:8091
+  registry:
+    type: file
+  config:
+    type: file
+
 logging:
   level:
     com.example.orderdemo: INFO
