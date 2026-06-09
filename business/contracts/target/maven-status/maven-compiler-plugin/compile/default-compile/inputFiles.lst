@@ -1,0 +1,7 @@
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/command/AllocatePromoStockCmd.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/event/OrderConfirmed.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/event/StockConfirmed.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/event/StockReleased.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/event/StockReserved.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/outbox/OutboxRow.java
+/Users/whening/IdeaProjects/OrderDemo/.claude/worktrees/phase2-inventory-tcc/business/contracts/src/main/java/com/example/contracts/result/CommandResult.java
