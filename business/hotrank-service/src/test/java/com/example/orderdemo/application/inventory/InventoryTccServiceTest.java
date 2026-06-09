@@ -2,6 +2,7 @@ package com.example.orderdemo.application.inventory;
 
 import com.example.contracts.result.CommandResult;
 import com.example.orderdemo.domain.inventory.*;
+import com.example.orderdemo.infrastructure.outbox.OutboxWriter;
 import com.example.orderdemo.infrastructure.persistence.ReservationDO;
 import com.example.orderdemo.infrastructure.persistence.ReservationMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,13 +17,15 @@ class InventoryTccServiceTest {
 
     private InventoryRepository repository;
     private ReservationMapper reservationMapper;
+    private OutboxWriter outboxWriter;
     private InventoryTccService service;
 
     @BeforeEach
     void setUp() {
         repository = mock(InventoryRepository.class);
         reservationMapper = mock(ReservationMapper.class);
-        service = new InventoryTccService(repository, reservationMapper);
+        outboxWriter = mock(OutboxWriter.class);
+        service = new InventoryTccService(repository, reservationMapper, outboxWriter);
     }
 
     @Test
