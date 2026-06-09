@@ -55,6 +55,31 @@ public class Order {
         domainEvents.add(new OrderEvent.OrderCancelled(id, cmd.reason(), Instant.now()));
     }
 
+    public static Order createPending(OrderCommand.PlaceOrder cmd) {
+        var order = new Order();
+        order.productName = cmd.productName();
+        order.quantity = cmd.quantity();
+        order.state = OrderState.Pending.INSTANCE;
+        order.idempotencyKey = cmd.idempotencyKey();
+        return order;
+    }
+
+    public void confirmFromPending() {
+        if (!(state instanceof OrderState.Pending)) {
+            throw new InvariantViolationException(id, "state-transition",
+                    "Cannot confirm from state: " + state.description());
+        }
+        this.state = OrderState.Confirmed.INSTANCE;
+    }
+
+    public void cancelFromPending() {
+        if (!(state instanceof OrderState.Pending)) {
+            throw new InvariantViolationException(id, "state-transition",
+                    "Cannot cancel from state: " + state.description());
+        }
+        this.state = OrderState.Cancelled.INSTANCE;
+    }
+
     public static Order reconstitute(OrderId id, String productName, int quantity,
                                       OrderState state, long version, String idempotencyKey) {
         var order = new Order();
