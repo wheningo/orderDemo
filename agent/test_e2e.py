@@ -1,50 +1,53 @@
 """E2E and property assertion tests for the hotrank-agent-loop.
 
 These tests verify:
-1. Full graph lifecycle (with mocked MCP)
-2. Property: duplicate events don't double-count (dedup at consumer level)
-3. Property: no command bypasses Go interceptor (only 2 tools exposed)
-4. Property: every dispatched command has audit trail
+1. Full graph lifecycle (with mocked MCP) including replan loop
+2. Property: no command bypasses Go interceptor (only 2 tools exposed)
+3. Property: every dispatched command goes through call_tool (gateway)
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from graph import get_compiled_graph, AgentState
 
 
 class TestE2ELifecycle:
-    """Card 6.1: Full lifecycle — observe -> decide -> dispatch -> verify."""
+    """Card 6.1: Full lifecycle — observe → decide → dispatch → verify (with replan)."""
 
-    def test_full_cycle_boost_accepted(self):
-        """Agent observes rankings, decides to boost lowest, dispatches, verifies."""
-        rankings = [
-            {"contentId": "c-1", "score": 100, "rank": 1},
-            {"contentId": "c-2", "score": 80, "rank": 2},
-            {"contentId": "c-3", "score": 50, "rank": 3},
-        ]
-        boosted_rankings = [
-            {"contentId": "c-1", "score": 100, "rank": 1},
-            {"contentId": "c-3", "score": 60, "rank": 2},
-            {"contentId": "c-2", "score": 80, "rank": 3},
-        ]
-
+    def test_full_cycle_reject_then_succeed(self):
+        """Money shot: agent sends weight=236, domain rejects, replan backs off to 100, succeeds."""
         call_count = {"n": 0}
 
         def mock_get_hot_rank(region, k=10):
             call_count["n"] += 1
-            if call_count["n"] == 1:
-                return rankings
-            return boosted_rankings
+            if call_count["n"] <= 1:
+                return [
+                    {"contentId": "hot-1", "score": 300, "rank": 1},
+                    {"contentId": "cold-1", "score": 5, "rank": 2},
+                ]
+            return [
+                {"contentId": "hot-1", "score": 300, "rank": 1},
+                {"contentId": "cold-1", "score": 105, "rank": 2},
+            ]
+
+        def mock_dispatch(**kwargs):
+            weight = kwargs.get("weight", 0)
+            if weight > 100:
+                return {"Accepted": False, "Reason": f"Weight must be between 1 and 100, got: {weight}"}
+            return {"Accepted": True, "Reason": "", "IdempotencyKey": "k-ok"}
 
         with patch("graph.get_hot_rank", side_effect=mock_get_hot_rank), \
-             patch("graph.dispatch_boost_exposure", return_value={"Accepted": True, "IdempotencyKey": "k-1"}):
+             patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
             graph = get_compiled_graph()
             result = graph.invoke({"region": "CN"})
 
-            assert result["top_k"] == rankings
-            assert result["decision"] is not None
-            assert result["decision"]["target"]["contentId"] == "c-3"
-            assert result["dispatched_cmd"]["sent"] is True
-            assert result["effect"] is not None
+            # First attempt rejected, second accepted
+            assert result["iterations"] == 2
+            assert len(result["attempts"]) == 2
+            assert result["attempts"][0]["accepted"] is False
+            assert "236" in result["attempts"][0]["reason"]
+            assert result["attempts"][1]["accepted"] is True
+            assert result["effect"]["applied"] is True
+            assert result["replan"] is False
 
     def test_full_cycle_no_rankings(self):
         """Agent observes empty rankings, decides nothing, no dispatch."""
@@ -56,15 +59,30 @@ class TestE2ELifecycle:
             assert result["decision"] is None
             assert result["dispatched_cmd"] is None
 
-    def test_full_cycle_dispatch_rejected(self):
-        """Agent handles rejection gracefully."""
+    def test_full_cycle_dispatch_exception(self):
+        """Agent handles transport exception gracefully."""
         with patch("graph.get_hot_rank", return_value=[{"contentId": "c-1", "score": 100}]), \
-             patch("graph.dispatch_boost_exposure", side_effect=Exception("rate limited")):
+             patch("graph.dispatch_boost_exposure", side_effect=Exception("connection refused")):
             graph = get_compiled_graph()
             result = graph.invoke({"region": "CN"})
 
             assert result["dispatched_cmd"]["sent"] is False
-            assert "rate limited" in result["dispatched_cmd"]["error"]
+            assert "connection refused" in result["dispatched_cmd"]["error"]
+
+    def test_max_iterations_prevents_infinite_loop(self):
+        """Graph stops after MAX_ITERATIONS even if domain keeps rejecting."""
+        def mock_dispatch(**kwargs):
+            return {"Accepted": False, "Reason": "always reject"}
+
+        with patch("graph.get_hot_rank", return_value=[
+            {"contentId": "hot-1", "score": 500},
+            {"contentId": "cold-1", "score": 100},
+        ]), patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
+            graph = get_compiled_graph()
+            result = graph.invoke({"region": "CN"})
+
+            assert result["iterations"] == 3  # MAX_ITERATIONS
+            assert result["replan"] is False  # stopped
 
 
 class TestPropertyAssertions:
@@ -73,7 +91,6 @@ class TestPropertyAssertions:
     def test_only_two_tools_exposed(self):
         """No command bypasses Go — only get_hot_rank and dispatch_boost_exposure exist."""
         import mcp_client
-        # The MCP client only defines these two tool functions
         public_tools = [name for name in dir(mcp_client)
                         if not name.startswith("_") and callable(getattr(mcp_client, name))
                         and name not in ("call_tool",)]

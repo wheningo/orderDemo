@@ -1,8 +1,10 @@
-"""Hot rank agent loop: observe → decide → dispatch → verify."""
+"""Hot rank agent loop: observe → decide → dispatch → verify (with replan loop)."""
 
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from mcp_client import get_hot_rank, dispatch_boost_exposure
+
+MAX_ITERATIONS = 3
 
 
 class AgentState(TypedDict, total=False):
@@ -10,7 +12,9 @@ class AgentState(TypedDict, total=False):
     top_k: list[dict]
     decision: dict | None
     dispatched_cmd: dict | None
+    attempts: list[dict]
     effect: dict | None
+    iterations: int
     replan: bool
 
 
@@ -21,7 +25,7 @@ def observe(state: AgentState) -> AgentState:
         top_k = get_hot_rank(region, k=10)
     except Exception:
         top_k = state.get("top_k", [])
-    return {"top_k": top_k}
+    return {"top_k": top_k, "attempts": [], "iterations": 0}
 
 
 def decide(state: AgentState) -> AgentState:
@@ -30,22 +34,23 @@ def decide(state: AgentState) -> AgentState:
     if not top_k:
         return {"decision": None}
 
-    # Strategy: boost the lowest-ranked item
     target = top_k[-1]
-    top_score = top_k[0].get("score", 0) if top_k else 0
-    target_score = target.get("score", 0)
+    gap = top_k[0].get("score", 0) - target.get("score", 0)
 
-    # Aggressive strategy: if gap is large, try a large weight
-    # This will be rejected by the domain if > 100 — demonstrating the "wall"
-    gap = top_score - target_score
+    # First attempt: gap large → aggressive weight (likely > 100, domain will reject)
     if gap > 200:
-        weight = int(gap * 0.8)  # likely > 100, domain will reject
+        weight = int(gap * 0.8)
     elif gap > 50:
         weight = min(int(gap * 0.5), 100)
     else:
         weight = 10
 
-    return {"decision": {"target": target, "weight": weight}}
+    # Replan: previous attempt was rejected → back off to legal upper bound
+    if state.get("replan"):
+        weight = min(weight, 100)
+
+    risk_tier = "high" if weight > 50 else "standard"
+    return {"decision": {"target": target, "weight": weight, "risk_tier": risk_tier}}
 
 
 def dispatch(state: AgentState) -> AgentState:
@@ -57,8 +62,7 @@ def dispatch(state: AgentState) -> AgentState:
     target = decision["target"]
     content_id = target.get("contentId") or target.get("content_id", "")
     region = state.get("region", "CN")
-
-    risk_tier = "high" if decision["weight"] > 50 else "standard"
+    risk_tier = decision.get("risk_tier", "standard")
 
     try:
         result = dispatch_boost_exposure(
@@ -74,42 +78,53 @@ def dispatch(state: AgentState) -> AgentState:
 
 
 def verify(state: AgentState) -> AgentState:
-    """Re-read hot rank and compare with pre-dispatch state."""
+    """Check dispatch result, record attempt, decide whether to replan."""
     dispatched = state.get("dispatched_cmd")
+    attempts = list(state.get("attempts", []))
+    iterations = state.get("iterations", 0) + 1
+
     if not dispatched or not dispatched.get("sent"):
-        return {"effect": None, "replan": False}
+        return {"effect": None, "replan": False, "iterations": iterations}
 
-    region = state.get("region", "CN")
-    try:
-        new_top_k = get_hot_rank(region, k=10)
-        # Compare: did the boosted item move up?
+    result = dispatched.get("result", {})
+    accepted = result.get("Accepted", result.get("accepted", False))
+    reason = result.get("Reason", result.get("reason", ""))
+
+    attempts.append({
+        "weight": dispatched["weight"],
+        "accepted": accepted,
+        "reason": reason,
+    })
+
+    if accepted:
+        # Success — read new state to confirm effect
+        region = state.get("region", "CN")
         target_id = dispatched["target"].get("contentId") or dispatched["target"].get("content_id", "")
-        old_rank = next(
-            (i + 1 for i, item in enumerate(state.get("top_k", []))
-             if (item.get("contentId") or item.get("content_id")) == target_id),
-            None,
-        )
-        new_rank = next(
-            (i + 1 for i, item in enumerate(new_top_k)
-             if (item.get("contentId") or item.get("content_id")) == target_id),
-            None,
-        )
+        try:
+            new_top_k = get_hot_rank(region, k=10)
+            new_score = next(
+                (item.get("score", 0) for item in new_top_k
+                 if (item.get("contentId") or item.get("content_id")) == target_id),
+                None,
+            )
+            effect = {"applied": True, "target": target_id, "new_score": new_score}
+        except Exception:
+            effect = {"applied": True, "target": target_id, "new_score": None}
+        return {"effect": effect, "replan": False, "attempts": attempts, "iterations": iterations}
+    else:
+        # Rejected — signal replan if under iteration limit
+        return {"effect": None, "replan": iterations < MAX_ITERATIONS, "attempts": attempts, "iterations": iterations}
 
-        return {
-            "effect": {
-                "target": target_id,
-                "old_rank": old_rank,
-                "new_rank": new_rank,
-                "improved": new_rank is not None and old_rank is not None and new_rank < old_rank,
-            },
-            "replan": new_rank is not None and old_rank is not None and new_rank >= old_rank,
-        }
-    except Exception:
-        return {"effect": {"observed": False}, "replan": True}
+
+def should_replan(state: AgentState) -> str:
+    """Conditional edge: replan → decide, else → END."""
+    if state.get("replan") and state.get("iterations", 0) < MAX_ITERATIONS:
+        return "decide"
+    return "end"
 
 
 def build_graph() -> StateGraph:
-    """Construct the agent loop graph."""
+    """Construct the agent loop graph with replan loop."""
     graph = StateGraph(AgentState)
 
     graph.add_node("observe", observe)
@@ -121,7 +136,7 @@ def build_graph() -> StateGraph:
     graph.add_edge("observe", "decide")
     graph.add_edge("decide", "dispatch")
     graph.add_edge("dispatch", "verify")
-    graph.add_edge("verify", END)
+    graph.add_conditional_edges("verify", should_replan, {"decide": "decide", "end": END})
 
     return graph
 
