@@ -11,6 +11,7 @@ class OrderStateTransitionTest {
         assertEquals("CONFIRMED", OrderState.Confirmed.INSTANCE.description());
         assertEquals("CLOSED", OrderState.Closed.INSTANCE.description());
         assertEquals("CANCELLED", OrderState.Cancelled.INSTANCE.description());
+        assertEquals("PENDING", OrderState.Pending.INSTANCE.description());
     }
 
     @Test
@@ -19,6 +20,7 @@ class OrderStateTransitionTest {
         assertEquals(OrderState.Confirmed.INSTANCE, OrderState.fromString("CONFIRMED"));
         assertEquals(OrderState.Closed.INSTANCE, OrderState.fromString("CLOSED"));
         assertEquals(OrderState.Cancelled.INSTANCE, OrderState.fromString("CANCELLED"));
+        assertEquals(OrderState.Pending.INSTANCE, OrderState.fromString("PENDING"));
     }
 
     @Test
@@ -34,6 +36,7 @@ class OrderStateTransitionTest {
             case OrderState.Confirmed s -> "confirmed";
             case OrderState.Closed s -> "closed";
             case OrderState.Cancelled s -> "cancelled";
+            case OrderState.Pending s -> "pending";
         };
         assertEquals("created", result);
     }

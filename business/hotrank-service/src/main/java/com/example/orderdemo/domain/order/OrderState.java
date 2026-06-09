@@ -24,12 +24,18 @@ public sealed interface OrderState {
         @Override public String description() { return "CANCELLED"; }
     }
 
+    record Pending() implements OrderState {
+        static final Pending INSTANCE = new Pending();
+        @Override public String description() { return "PENDING"; }
+    }
+
     static OrderState fromString(String value) {
         return switch (value) {
             case "CREATED" -> Created.INSTANCE;
             case "CONFIRMED" -> Confirmed.INSTANCE;
             case "CLOSED" -> Closed.INSTANCE;
             case "CANCELLED" -> Cancelled.INSTANCE;
+            case "PENDING" -> Pending.INSTANCE;
             default -> throw new IllegalArgumentException("Unknown order state: " + value);
         };
     }

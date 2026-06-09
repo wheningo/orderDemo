@@ -1,0 +1,7 @@
+com/example/contracts/result/CommandResult.class
+com/example/contracts/event/StockReserved.class
+com/example/contracts/event/StockConfirmed.class
+com/example/contracts/outbox/OutboxRow.class
+com/example/contracts/command/AllocatePromoStockCmd.class
+com/example/contracts/event/OrderConfirmed.class
+com/example/contracts/event/StockReleased.class
