@@ -4,9 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@SpringBootApplication(excludeName = {
-    "org.apache.seata.spring.boot.autoconfigure.SeataAutoConfiguration"
-})
+@SpringBootApplication
 @EnableScheduling
 public class OrderDemoApplication {
 

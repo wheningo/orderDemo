@@ -1,8 +1,7 @@
 package com.example.orderdemo.application.order;
 
-import com.example.contracts.result.CommandResult;
-import com.example.orderdemo.application.inventory.InventoryTccService;
-import com.example.orderdemo.domain.order.OrderId;
+import com.example.orderdemo.application.inventory.InventoryTccAction;
+import io.seata.rm.tcc.api.BusinessActionContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -11,66 +10,40 @@ import static org.mockito.Mockito.*;
 
 class PlaceOrderServiceTest {
 
-    private OrderTccService orderTccService;
-    private InventoryTccService inventoryTccService;
+    private OrderTccAction orderTccAction;
+    private InventoryTccAction inventoryTccAction;
     private PlaceOrderService service;
 
     @BeforeEach
     void setUp() {
-        orderTccService = mock(OrderTccService.class);
-        inventoryTccService = mock(InventoryTccService.class);
-        service = new PlaceOrderService(orderTccService, inventoryTccService);
+        orderTccAction = mock(OrderTccAction.class);
+        inventoryTccAction = mock(InventoryTccAction.class);
+        service = new PlaceOrderService(orderTccAction, inventoryTccAction);
     }
 
     @Test
     void successfulPlaceOrder() {
-        when(orderTccService.tryCreate(anyString(), eq("Coffee"), eq(3))).thenReturn(new OrderId(1L));
-        when(inventoryTccService.tryReserve(anyString(), eq("SKU-COFFEE"), eq(3))).thenReturn(CommandResult.ok());
+        when(orderTccAction.tryCreate(any(), eq("Coffee"), eq(3))).thenReturn(true);
+        when(inventoryTccAction.tryReserve(any(), eq("SKU-COFFEE"), eq(3))).thenReturn(true);
 
         PlaceOrderResult result = service.placeOrder("Coffee", 3, "SKU-COFFEE");
         assertTrue(result.success());
-        assertNotNull(result.orderId());
-
-        verify(orderTccService).confirm(new OrderId(1L));
-        verify(inventoryTccService).confirm(anyString());
     }
 
     @Test
-    void inventoryRejectCausesCancel() {
-        when(orderTccService.tryCreate(anyString(), eq("Coffee"), eq(3))).thenReturn(new OrderId(1L));
-        when(inventoryTccService.tryReserve(anyString(), eq("SKU-COFFEE"), eq(3)))
-                .thenReturn(CommandResult.oversellRejected("SKU-COFFEE", 3, 0));
+    void inventoryRejectThrowsOversellException() {
+        when(orderTccAction.tryCreate(any(), eq("Coffee"), eq(3))).thenReturn(true);
+        when(inventoryTccAction.tryReserve(any(), eq("SKU-COFFEE"), eq(3))).thenReturn(false);
 
-        PlaceOrderResult result = service.placeOrder("Coffee", 3, "SKU-COFFEE");
-        assertFalse(result.success());
-        assertTrue(result.reason().contains("Oversell"));
-
-        verify(inventoryTccService).cancel(anyString());
-        verify(orderTccService).cancel(new OrderId(1L));
-        verify(orderTccService, never()).confirm(any());
+        assertThrows(OversellRejectedException.class,
+                () -> service.placeOrder("Coffee", 3, "SKU-COFFEE"));
     }
 
     @Test
-    void orderTryExceptionCausesCancel() {
-        when(orderTccService.tryCreate(anyString(), eq("Coffee"), eq(3)))
-                .thenThrow(new RuntimeException("DB error"));
+    void orderTryFailureThrows() {
+        when(orderTccAction.tryCreate(any(), eq("Coffee"), eq(3))).thenReturn(false);
 
-        PlaceOrderResult result = service.placeOrder("Coffee", 3, "SKU-COFFEE");
-        assertFalse(result.success());
-
-        verify(inventoryTccService).cancel(anyString());
-    }
-
-    @Test
-    void confirmFailureCausesCancel() {
-        when(orderTccService.tryCreate(anyString(), eq("Coffee"), eq(3))).thenReturn(new OrderId(1L));
-        when(inventoryTccService.tryReserve(anyString(), eq("SKU-COFFEE"), eq(3))).thenReturn(CommandResult.ok());
-        doThrow(new RuntimeException("confirm failed")).when(orderTccService).confirm(any());
-
-        PlaceOrderResult result = service.placeOrder("Coffee", 3, "SKU-COFFEE");
-        assertFalse(result.success());
-
-        verify(inventoryTccService).cancel(anyString());
-        verify(orderTccService).cancel(new OrderId(1L));
+        assertThrows(RuntimeException.class,
+                () -> service.placeOrder("Coffee", 3, "SKU-COFFEE"));
     }
 }
