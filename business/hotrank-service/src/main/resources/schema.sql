@@ -7,3 +7,10 @@ CREATE TABLE IF NOT EXISTS orders (
     idempotency_key VARCHAR(255) NOT NULL,
     CONSTRAINT uq_orders_idempotency_key UNIQUE (idempotency_key)
 );
+
+CREATE TABLE IF NOT EXISTS inventory (
+    sku VARCHAR(64) PRIMARY KEY,
+    total BIGINT NOT NULL DEFAULT 0,
+    reserved BIGINT NOT NULL DEFAULT 0,
+    version BIGINT NOT NULL DEFAULT 0
+);
