@@ -12,11 +12,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * Disaster-backup reaper: catches reservations that RocketMQ timeout guard missed
+ * (broker failure, message loss). Primary timeout mechanism is the per-reservation
+ * RocketMQ scheduled message fired at precise deliverTimeMillis.
+ */
 @Component
 public class ReservationReaper {
 
     private static final Logger log = LoggerFactory.getLogger(ReservationReaper.class);
-    private static final Duration TIMEOUT = Duration.ofMinutes(30);
+    private static final Duration TIMEOUT = Duration.ofHours(1);
 
     private final ReservationMapper reservationMapper;
     private final InventoryTccService inventoryTccService;
@@ -26,16 +31,16 @@ public class ReservationReaper {
         this.inventoryTccService = inventoryTccService;
     }
 
-    @Scheduled(fixedDelay = 60_000)
+    @Scheduled(fixedDelay = 300_000)
     public void reapStale() {
         Instant before = Instant.now().minus(TIMEOUT);
         List<ReservationDO> stale = reservationMapper.findStaleTried(before);
         for (ReservationDO r : stale) {
             try {
                 inventoryTccService.cancel(r.getTxKey());
-                log.warn("Reaped stale reservation: txKey={}, sku={}, qty={}", r.getTxKey(), r.getSku(), r.getQty());
+                log.warn("Disaster reaper: cancelled stale reservation txKey={}, sku={}, qty={}", r.getTxKey(), r.getSku(), r.getQty());
             } catch (Exception e) {
-                log.error("Reap failed for txKey={}", r.getTxKey(), e);
+                log.error("Disaster reaper failed for txKey={}", r.getTxKey(), e);
             }
         }
     }
