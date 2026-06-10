@@ -62,3 +62,19 @@ def allocate_promo_stock(
             "idempotency_key": idempotency_key,
         },
     )
+
+
+def schedule_close_order(
+    order_id: str,
+    reason: str = "timeout",
+    delay_minutes: int = 5,
+) -> dict:
+    """Schedule an order to be closed after a delay."""
+    return call_tool(
+        "schedule_close_order",
+        {
+            "order_id": order_id,
+            "reason": reason,
+            "delay_minutes": delay_minutes,
+        },
+    )

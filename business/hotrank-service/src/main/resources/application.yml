@@ -25,6 +25,11 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
+rocketmq:
+  name-server: localhost:9876
+  producer:
+    group: hotrank-producer
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   configuration:

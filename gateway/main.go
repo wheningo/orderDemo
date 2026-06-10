@@ -30,6 +30,7 @@ func main() {
 	mcp.RegisterHotRankTools(mcpServer, config)
 	mcp.RegisterBoostTool(mcpServer, config, chain, audit)
 	mcp.RegisterInventoryTool(mcpServer, config, chain, audit)
+	mcp.RegisterScheduleTool(mcpServer, config, chain, audit)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
