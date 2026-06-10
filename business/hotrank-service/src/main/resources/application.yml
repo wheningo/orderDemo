@@ -1,6 +1,14 @@
 spring:
   application:
     name: order-demo
+  cloud:
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:localhost:8858}
+        port: 8719
+      eager: false
+    compatibility-verifier:
+      enabled: false
   threads:
     virtual:
       enabled: true

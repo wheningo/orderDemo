@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/whening/hotrank-agent-loop/gateway/interceptor"
 	"github.com/whening/hotrank-agent-loop/gateway/mcp"
 )
@@ -16,12 +17,21 @@ func main() {
 		javaURL = "http://localhost:8080"
 	}
 
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+
+	// Redis-backed sliding window rate limiter (fail-open if Redis unavailable)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	var rateLimiter interceptor.Interceptor = interceptor.NewRedisRateLimitInterceptor(redisClient, 60, 100)
+
 	audit := interceptor.NewAuditInterceptor()
 
 	// Chain: idempotency → ratelimit (audit is external, wraps the whole flow)
 	chain := interceptor.NewChain(
 		interceptor.NewIdempotencyInterceptor(),
-		interceptor.NewRateLimitInterceptor(10, 20),
+		rateLimiter,
 	)
 
 	// Build MCP server with tools
@@ -36,7 +46,7 @@ func main() {
 	mux.HandleFunc("/health", healthHandler)
 	mux.Handle("/mcp/", mcpServer.HTTPHandler())
 
-	log.Printf("gateway listening on :8081 (java backend: %s)", javaURL)
+	log.Printf("gateway listening on :8081 (java backend: %s, redis: %s)", javaURL, redisAddr)
 	log.Fatal(http.ListenAndServe(":8081", mux))
 }
 

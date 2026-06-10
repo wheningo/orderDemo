@@ -16,6 +16,19 @@ spring:
       - org.apache.seata.spring.boot.autoconfigure.SeataDataSourceAutoConfiguration
       - org.apache.seata.spring.boot.autoconfigure.SeataHttpAutoConfiguration
       - org.apache.rocketmq.spring.autoconfigure.RocketMQAutoConfiguration
+      - com.alibaba.cloud.nacos.NacosDiscoveryAutoConfiguration
+      - com.alibaba.cloud.nacos.NacosConfigAutoConfiguration
+      - com.alibaba.cloud.sentinel.SentinelAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+    sentinel:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
 
 seata:
   enabled: false
