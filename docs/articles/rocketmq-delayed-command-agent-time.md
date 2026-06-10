@@ -41,7 +41,7 @@ tryReserve 成功
   ├── outbox: StockReserved        → OutboxRelay → Kafka（下游解耦）
   └── outbox: TimeoutGuard         → OutboxRelay → RocketMQ 5.x（精确定时）
                                                     ↓
-                                              10min 后投递
+                                        配置的超时窗口后投递（默认30min）
                                                     ↓
                                         ReservationTimeoutConsumer
                                                     ↓
@@ -57,12 +57,17 @@ tryReserve 成功
 ### 4.1 Try 阶段多写一条超时兜底（同事务原子）
 
 ```java
+@Value("${inventory.reservation.timeout-minutes:30}")
+private int timeoutMinutes;
+private Duration reservationTimeout = Duration.ofMinutes(timeoutMinutes);
+
 @Transactional(propagation = Propagation.REQUIRES_NEW)
 public CommandResult tryReserve(String txKey, String sku, int qty) {
     // ... reserve + 台账 + StockReserved（已有）
 
     // 新增：超时兜底，精确到这一条预留的超时时刻
-    long deliverTimeMillis = Instant.now().plusMinutes(10).toEpochMilli();
+    // 超时窗口可配（application.yml），必须对齐业务支付窗口
+    long deliverTimeMillis = Instant.now().plus(reservationTimeout).toEpochMilli();
     outboxWriter.write("Inventory", sku, "StockReservationTimeoutGuard",
             Map.of("txKey", txKey, "sku", sku, "qty", qty,
                    "deliverTimeMillis", deliverTimeMillis));
@@ -71,7 +76,7 @@ public CommandResult tryReserve(String txKey, String sku, int qty) {
 }
 ```
 
-跟 `StockReserved` 在**同一个事务**里——要么都写进去，要么都不写。这是 outbox 模式的核心保证：业务落地和发消息意图的原子性。
+超时窗口**必须对齐业务真实支付窗口**——如果用户有 30 分钟付款时间，这里就配 30。写死 10 分钟意味着用户还在正常付款时预留已被释放，会造成"付款成功但库存没了"。所以这个值是 `application.yml` 可配的，不是 magic number。
 
 ### 4.2 OutboxRelay 按 eventType 分流
 
@@ -109,11 +114,12 @@ private void relayToRocketMQ(OutboxDO row) throws Exception {
 @ConditionalOnProperty(prefix = "rocketmq", name = "name-server")
 public class RocketMQ5Producer {
 
+    private ClientServiceProvider provider;   // 字段，init() 时缓存，不在热路径重复 SPI 查找
     private Producer producer;
 
     @PostConstruct
     public void init() throws Exception {
-        ClientServiceProvider provider = ClientServiceProvider.loadService();
+        provider = ClientServiceProvider.loadService();
         ClientConfiguration config = ClientConfiguration.newBuilder()
                 .setEndpoints(endpoint)
                 .build();
@@ -124,7 +130,7 @@ public class RocketMQ5Producer {
     }
 
     public void sendScheduled(String key, String payload, long deliverTimeMillis) {
-        Message message = provider.newMessageBuilder()
+        Message message = provider.newMessageBuilder()   // 用缓存的 provider
                 .setTopic("reservation-timeout-guard")
                 .setKeys(key)
                 .setBody(payload.getBytes())
@@ -135,7 +141,7 @@ public class RocketMQ5Producer {
 }
 ```
 
-**`setDeliveryTimestamp`** —— 这是 5.x 独有的 API。不是"delay 5 分钟"，是"在 2026-06-10T14:55:00.000Z 投递"。每条消息独立倒计时。
+**`setDeliveryTimestamp`** —— 这是 5.x 独有的 API。不是"delay 5 分钟"，是"在 2026-06-10T14:55:00.000Z 投递"。每条消息独立倒计时。注意 5.x client 走 gRPC 协议，broker 启动时必须 `--enable-proxy`，否则连不上。
 
 ### 4.4 消费端：精确时刻触发 cancel
 
@@ -172,6 +178,19 @@ public class ReservationTimeoutConsumer {
 
 注意：消费端**没有新的状态校验逻辑**——全部复用 `cancel(txKey)` 里已有的幂等判断。这就是上一篇里我们写的台账 + 状态幂等的价值：新来一个触发源（定时消息），零新增校验代码。
 
+### 4.5 重复投递怎么办？（at-least-once + 领域幂等）
+
+OutboxRelay 的 `sendScheduled()` 和 `markPublished()` 不是原子的——如果消息发成功、但 markPublished 前进程崩溃，下一轮 relay 会再投一条。同一个 txKey 两条超时守卫。
+
+这**不是 bug，是有意的 at-least-once 设计**。因为：
+
+- `cancel(txKey)` 里 `state ≠ TRIED → return`，重复消费是 no-op
+- 如果消息丢了（broker 故障），重投反而是保护
+
+也就是说：relay 保证"至少投一次"，领域幂等保证"多投不坏事"。这两层加起来 = **不丢不错**。
+
+如果你追求"恰好一次"（exactly-once），需要事务消息或本地消息表 + 对账——复杂度翻倍，而收益是零（因为消费端已经幂等了）。所以我不做。
+
 ## 5. 对比：粗粒度扫表 vs 精确定时消息
 
 之前的 `ReservationReaper`（全表扫描 + 30min 超时窗口）有两个问题：
@@ -181,7 +200,7 @@ public class ReservationTimeoutConsumer {
 
 RocketMQ 定时消息：
 
-- **精度高**：每条预留有自己的精确投递时刻（T+10min），broker 负责定时，不靠客户端扫描。
+- **精度高**：每条预留有自己的精确投递时刻（T + 配置超时窗口），broker 负责定时，不靠客户端扫描。
 - **扩展好**：消息量增长由 broker 水平扩展承担，客户端只消费到达的消息。
 
 但 **RocketMQ 不是银弹** —— broker 故障、消息丢失是可能的。所以 ReservationReaper 不删，**降级为灾备**：
@@ -245,15 +264,16 @@ agent → Go (idempotency + rate limit + audit)
 git clone https://github.com/wheningo/orderDemo.git
 cd orderDemo
 
-# 1. RocketMQ（清华镜像，Java 21 需要去掉 UseBiasedLocking）
+# 1. RocketMQ 5.x（5.3.1+ 均可；Java 21 需要去掉 UseBiasedLocking）
+#    5.x client 走 gRPC，broker 必须 --enable-proxy
 wget https://dlcdn.apache.org/rocketmq/5.3.1/rocketmq-all-5.3.1-bin-release.zip
 unzip rocketmq-all-5.3.1-bin-release.zip
 cd rocketmq-all-5.3.1-bin-release
-# 修 bin/runbroker.sh：删除 -XX:-UseBiasedLocking
+# 修 bin/runbroker.sh：删除 -XX:-UseBiasedLocking（Java 18+ 已移除该选项）
 sed -i 's/-XX:-UseBiasedLocking//' bin/runbroker.sh
 bin/mqnamesrv &
 sleep 5
-bin/mqbroker -n localhost:9876 --enable-proxy &
+bin/mqbroker -n localhost:9876 --enable-proxy &   # --enable-proxy 是 5.x gRPC client 必需的
 
 # 2. Redis
 redis-server &
