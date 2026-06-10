@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -47,6 +48,9 @@ public class InventoryTccService {
             reservationMapper.insert(txKey, sku, qty, "TRIED");
             outboxWriter.write("Inventory", sku, "StockReserved",
                     new StockReserved(UUID.randomUUID().toString(), sku, qty, txKey, Instant.now()));
+            long deliverTimeMillis = Instant.now().plusSeconds(600).toEpochMilli();
+            outboxWriter.write("Inventory", sku, "StockReservationTimeoutGuard",
+                    Map.of("txKey", txKey, "sku", sku, "qty", qty, "deliverTimeMillis", deliverTimeMillis));
             log.info("TCC Try: reserved sku={}, qty={}, txKey={}", sku, qty, txKey);
             return CommandResult.ok();
         } catch (OversellException e) {
