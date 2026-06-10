@@ -25,7 +25,7 @@ class InventoryTccServiceTest {
         repository = mock(InventoryRepository.class);
         reservationMapper = mock(ReservationMapper.class);
         outboxWriter = mock(OutboxWriter.class);
-        service = new InventoryTccService(repository, reservationMapper, outboxWriter);
+        service = new InventoryTccService(repository, reservationMapper, outboxWriter, 30);
     }
 
     @Test

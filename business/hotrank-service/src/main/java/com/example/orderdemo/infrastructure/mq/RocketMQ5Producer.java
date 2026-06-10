@@ -26,11 +26,12 @@ public class RocketMQ5Producer {
     @Value("${rocketmq.name-server:localhost:9876}")
     private String endpoint;
 
+    private ClientServiceProvider provider;
     private Producer producer;
 
     @PostConstruct
     public void init() throws Exception {
-        ClientServiceProvider provider = ClientServiceProvider.loadService();
+        provider = ClientServiceProvider.loadService();
         ClientConfiguration config = ClientConfiguration.newBuilder()
                 .setEndpoints(endpoint)
                 .setRequestTimeout(Duration.ofSeconds(5))
@@ -51,7 +52,6 @@ public class RocketMQ5Producer {
 
     public void sendScheduled(String key, String payload, long deliverTimeMillis) {
         try {
-            ClientServiceProvider provider = ClientServiceProvider.loadService();
             Message message = provider.newMessageBuilder()
                     .setTopic(TOPIC)
                     .setKeys(key)

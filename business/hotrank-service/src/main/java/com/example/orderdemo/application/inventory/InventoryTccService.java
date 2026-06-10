@@ -9,10 +9,12 @@ import com.example.orderdemo.infrastructure.outbox.OutboxWriter;
 import com.example.orderdemo.infrastructure.persistence.ReservationMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -25,11 +27,14 @@ public class InventoryTccService {
     private final InventoryRepository repository;
     private final ReservationMapper reservationMapper;
     private final OutboxWriter outboxWriter;
+    private final Duration reservationTimeout;
 
-    public InventoryTccService(InventoryRepository repository, ReservationMapper reservationMapper, OutboxWriter outboxWriter) {
+    public InventoryTccService(InventoryRepository repository, ReservationMapper reservationMapper, OutboxWriter outboxWriter,
+                               @Value("${inventory.reservation.timeout-minutes:30}") int timeoutMinutes) {
         this.repository = repository;
         this.reservationMapper = reservationMapper;
         this.outboxWriter = outboxWriter;
+        this.reservationTimeout = Duration.ofMinutes(timeoutMinutes);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -48,7 +53,7 @@ public class InventoryTccService {
             reservationMapper.insert(txKey, sku, qty, "TRIED");
             outboxWriter.write("Inventory", sku, "StockReserved",
                     new StockReserved(UUID.randomUUID().toString(), sku, qty, txKey, Instant.now()));
-            long deliverTimeMillis = Instant.now().plusSeconds(600).toEpochMilli();
+            long deliverTimeMillis = Instant.now().plus(reservationTimeout).toEpochMilli();
             outboxWriter.write("Inventory", sku, "StockReservationTimeoutGuard",
                     Map.of("txKey", txKey, "sku", sku, "qty", qty, "deliverTimeMillis", deliverTimeMillis));
             log.info("TCC Try: reserved sku={}, qty={}, txKey={}", sku, qty, txKey);

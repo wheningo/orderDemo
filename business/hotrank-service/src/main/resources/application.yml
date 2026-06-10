@@ -38,6 +38,10 @@ rocketmq:
   producer:
     group: hotrank-producer
 
+inventory:
+  reservation:
+    timeout-minutes: 30
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   configuration:
