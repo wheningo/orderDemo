@@ -1,0 +1,10 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: risk-control
+
+logging:
+  level:
+    com.example.riskcontrol: INFO

@@ -1,0 +1,47 @@
+package com.example.riskcontrol.rules
+
+import com.example.riskcontrol.engine.RiskFact
+
+// Rule 1: High frequency — more than 20 commands per minute -> reject
+rule "high-frequency-reject"
+    salience 100
+    when
+        $fact : RiskFact(frequencyLastMinute > 20, decision == "PASS")
+    then
+        $fact.setDecision("REJECT");
+        $fact.setReason("Frequency too high: " + $fact.getFrequencyLastMinute() + " commands/min (limit: 20)");
+        $fact.setRuleId("FREQ_LIMIT");
+end
+
+// Rule 2: Large amount — qty > 500 -> pending review
+rule "large-amount-review"
+    salience 90
+    when
+        $fact : RiskFact(amount > 500, decision == "PASS")
+    then
+        $fact.setDecision("PENDING_REVIEW");
+        $fact.setReason("Large amount requires review: " + $fact.getAmount() + " (threshold: 500)");
+        $fact.setRuleId("AMOUNT_REVIEW");
+end
+
+// Rule 3: L4 risk tier — always requires human approval
+rule "l4-requires-approval"
+    salience 95
+    when
+        $fact : RiskFact(riskTier == "L4", decision == "PASS")
+    then
+        $fact.setDecision("PENDING_REVIEW");
+        $fact.setReason("L4 command requires human approval");
+        $fact.setRuleId("L4_APPROVAL");
+end
+
+// Rule 4: Unknown region -> reject
+rule "unknown-region-reject"
+    salience 80
+    when
+        $fact : RiskFact(region not in ("CN", "US", "EU", "SEA"), decision == "PASS")
+    then
+        $fact.setDecision("REJECT");
+        $fact.setReason("Unknown region: " + $fact.getRegion());
+        $fact.setRuleId("REGION_BLOCK");
+end
