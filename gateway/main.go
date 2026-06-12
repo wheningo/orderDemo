@@ -28,10 +28,16 @@ func main() {
 
 	audit := interceptor.NewAuditInterceptor()
 
-	// Chain: idempotency → ratelimit (audit is external, wraps the whole flow)
+	riskServiceURL := os.Getenv("RISK_SERVICE_URL")
+	if riskServiceURL == "" {
+		riskServiceURL = "http://localhost:8083"
+	}
+
+	// Chain: idempotency → ratelimit → risk (audit is external, wraps the whole flow)
 	chain := interceptor.NewChain(
 		interceptor.NewIdempotencyInterceptor(),
 		rateLimiter,
+		interceptor.NewRiskInterceptor(riskServiceURL),
 	)
 
 	// Build MCP server with tools
