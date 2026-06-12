@@ -5,6 +5,12 @@ spring:
   application:
     name: risk-control
 
+nacos:
+  config:
+    server-addr: ${NACOS_ADDR:localhost:8848}
+    data-id: risk-rules.drl
+    group: RISK_CONTROL
+
 logging:
   level:
     com.example.riskcontrol: INFO

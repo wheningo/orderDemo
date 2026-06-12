@@ -9,26 +9,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 @Service
 public class RiskEvaluationService {
 
     private static final Logger log = LoggerFactory.getLogger(RiskEvaluationService.class);
 
-    private final KieContainer kieContainer;
+    private final AtomicReference<KieContainer> kieContainerRef;
     private final DataEnrichmentService dataEnrichmentService;
     private final ReviewService reviewService;
 
-    public RiskEvaluationService(KieContainer kieContainer, DataEnrichmentService dataEnrichmentService, ReviewService reviewService) {
-        this.kieContainer = kieContainer;
+    public RiskEvaluationService(AtomicReference<KieContainer> kieContainerRef, DataEnrichmentService dataEnrichmentService, ReviewService reviewService) {
+        this.kieContainerRef = kieContainerRef;
         this.dataEnrichmentService = dataEnrichmentService;
         this.reviewService = reviewService;
     }
 
     public RiskDecision evaluate(RiskEvaluationRequest request) {
-        // Step 1: Enrich data (reserved — currently no-op)
         var enriched = dataEnrichmentService.enrich(request);
 
-        // Step 2: Build fact and fire rules
         RiskFact fact = new RiskFact(
                 request.commandType(),
                 request.targetId(),
@@ -39,7 +39,8 @@ public class RiskEvaluationService {
                 request.frequencyLastMinute()
         );
 
-        KieSession session = kieContainer.newKieSession();
+        KieContainer container = kieContainerRef.get();
+        KieSession session = container.newKieSession();
         try {
             session.insert(fact);
             session.fireAllRules();
@@ -50,7 +51,6 @@ public class RiskEvaluationService {
         RiskDecision decision = switch (fact.getDecision()) {
             case "REJECT" -> RiskDecision.reject(fact.getReason(), fact.getRuleId());
             case "PENDING_REVIEW" -> {
-                // Step 3: Trigger async review (reserved — currently logs)
                 reviewService.submitForReview(request, fact.getReason(), fact.getRuleId());
                 yield RiskDecision.pendingReview(fact.getReason(), fact.getRuleId());
             }
