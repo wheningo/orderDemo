@@ -1,7 +1,14 @@
 """Tests for the agent loop graph."""
 
+import pytest
 from unittest.mock import patch
+from preflight import PreflightResult
 from graph import AgentState, build_graph, get_compiled_graph, observe, decide, dispatch, verify
+
+
+def _patch_preflight_pass():
+    """Context managers to bypass preflight in tests that focus on domain behavior."""
+    return patch("preflight.preflight_check_boost", return_value=PreflightResult.ok())
 
 
 def test_observe_calls_mcp():
@@ -33,7 +40,6 @@ def test_decide_picks_lowest_ranked():
 
 
 def test_decide_produces_aggressive_weight_for_large_gap():
-    """When score gap is large, decide produces weight > 100 (domain will reject)."""
     state: AgentState = {
         "top_k": [
             {"contentId": "c1", "score": 500},
@@ -46,7 +52,6 @@ def test_decide_produces_aggressive_weight_for_large_gap():
 
 
 def test_decide_backs_off_on_replan():
-    """When replan=True, decide caps weight to 100."""
     state: AgentState = {
         "top_k": [
             {"contentId": "c1", "score": 500},
@@ -81,7 +86,8 @@ def test_dispatch_skips_when_no_decision():
 
 
 def test_dispatch_handles_error():
-    with patch("graph.dispatch_boost_exposure", side_effect=Exception("timeout")):
+    with _patch_preflight_pass(), \
+         patch("graph.dispatch_boost_exposure", side_effect=Exception("timeout")):
         state: AgentState = {
             "decision": {"target": {"contentId": "c1"}, "weight": 10, "risk_tier": "standard"},
             "region": "CN",
@@ -143,14 +149,14 @@ def test_verify_stops_replan_at_max_iterations():
             "result": {"Accepted": False, "Reason": "rejected"},
         },
         "attempts": [],
-        "iterations": 2,  # will become 3 = MAX_ITERATIONS
+        "iterations": 2,
     }
     result = verify(state)
     assert result["replan"] is False
 
 
 def test_full_graph_reject_then_succeed():
-    """Full graph: first attempt rejected, replan backs off, second succeeds."""
+    """Full graph: first attempt rejected by domain, replan backs off, second succeeds."""
     call_count = {"n": 0}
 
     def mock_get_hot_rank(region, k=10):
@@ -165,7 +171,8 @@ def test_full_graph_reject_then_succeed():
             return {"Accepted": False, "Reason": f"Weight must be between 1 and 100, got: {weight}"}
         return {"Accepted": True, "Reason": "", "IdempotencyKey": "k-ok"}
 
-    with patch("graph.get_hot_rank", side_effect=mock_get_hot_rank), \
+    with _patch_preflight_pass(), \
+         patch("graph.get_hot_rank", side_effect=mock_get_hot_rank), \
          patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
         graph = get_compiled_graph()
         result = graph.invoke({"region": "CN"})

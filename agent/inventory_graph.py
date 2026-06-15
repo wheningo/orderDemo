@@ -43,6 +43,8 @@ def decide(state: InventoryState) -> InventoryState:
 
 def dispatch(state: InventoryState) -> InventoryState:
     """Call allocate_promo_stock via MCP."""
+    from preflight import preflight_check_inventory, on_dispatch_result
+
     qty = state.get("qty", 0)
     if qty <= 0:
         return {"result": {"accepted": False, "reason": "qty reduced to 0, giving up", "retryable": False}}
@@ -51,10 +53,19 @@ def dispatch(state: InventoryState) -> InventoryState:
     region = state.get("region", "CN")
     risk_tier = "high" if qty > 50 else "standard"
 
+    # Agent self-check (Level 1)
+    check = preflight_check_inventory(qty, sku)
+    if not check.passed:
+        on_dispatch_result(False, check.reason)
+        return {"result": {"accepted": False, "reason": "[preflight] " + check.reason, "retryable": False}}
+
     try:
         result = allocate_promo_stock(sku=sku, qty=qty, region=region, risk_tier=risk_tier)
+        accepted = result.get("accepted", False)
+        on_dispatch_result(accepted, result.get("reason", ""))
         return {"result": result}
     except Exception as e:
+        on_dispatch_result(False, str(e))
         return {"result": {"accepted": False, "reason": str(e), "retryable": True}}
 
 

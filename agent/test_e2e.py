@@ -2,12 +2,17 @@
 
 These tests verify:
 1. Full graph lifecycle (with mocked MCP) including replan loop
-2. Property: no command bypasses Go interceptor (only 2 tools exposed)
+2. Property: no command bypasses Go interceptor
 3. Property: every dispatched command goes through call_tool (gateway)
 """
 
 from unittest.mock import patch
+from preflight import PreflightResult
 from graph import get_compiled_graph, AgentState
+
+
+def _patch_preflight_pass():
+    return patch("preflight.preflight_check_boost", return_value=PreflightResult.ok())
 
 
 class TestE2ELifecycle:
@@ -35,12 +40,12 @@ class TestE2ELifecycle:
                 return {"Accepted": False, "Reason": f"Weight must be between 1 and 100, got: {weight}"}
             return {"Accepted": True, "Reason": "", "IdempotencyKey": "k-ok"}
 
-        with patch("graph.get_hot_rank", side_effect=mock_get_hot_rank), \
+        with _patch_preflight_pass(), \
+             patch("graph.get_hot_rank", side_effect=mock_get_hot_rank), \
              patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
             graph = get_compiled_graph()
             result = graph.invoke({"region": "CN"})
 
-            # First attempt rejected, second accepted
             assert result["iterations"] == 2
             assert len(result["attempts"]) == 2
             assert result["attempts"][0]["accepted"] is False
@@ -61,7 +66,8 @@ class TestE2ELifecycle:
 
     def test_full_cycle_dispatch_exception(self):
         """Agent handles transport exception gracefully."""
-        with patch("graph.get_hot_rank", return_value=[{"contentId": "c-1", "score": 100}]), \
+        with _patch_preflight_pass(), \
+             patch("graph.get_hot_rank", return_value=[{"contentId": "c-1", "score": 100}]), \
              patch("graph.dispatch_boost_exposure", side_effect=Exception("connection refused")):
             graph = get_compiled_graph()
             result = graph.invoke({"region": "CN"})
@@ -74,27 +80,28 @@ class TestE2ELifecycle:
         def mock_dispatch(**kwargs):
             return {"Accepted": False, "Reason": "always reject"}
 
-        with patch("graph.get_hot_rank", return_value=[
-            {"contentId": "hot-1", "score": 500},
-            {"contentId": "cold-1", "score": 100},
-        ]), patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
+        with _patch_preflight_pass(), \
+             patch("graph.get_hot_rank", return_value=[
+                {"contentId": "hot-1", "score": 500},
+                {"contentId": "cold-1", "score": 100},
+             ]), patch("graph.dispatch_boost_exposure", side_effect=mock_dispatch):
             graph = get_compiled_graph()
             result = graph.invoke({"region": "CN"})
 
-            assert result["iterations"] == 3  # MAX_ITERATIONS
-            assert result["replan"] is False  # stopped
+            assert result["iterations"] == 3
+            assert result["replan"] is False
 
 
 class TestPropertyAssertions:
     """Card 6.2: Property assertions."""
 
-    def test_only_two_tools_exposed(self):
-        """No command bypasses Go — only get_hot_rank and dispatch_boost_exposure exist."""
+    def test_mcp_tools_exposed(self):
+        """All MCP tools are exposed via mcp_client."""
         import mcp_client
         public_tools = [name for name in dir(mcp_client)
                         if not name.startswith("_") and callable(getattr(mcp_client, name))
                         and name not in ("call_tool",)]
-        assert set(public_tools) == {"get_hot_rank", "dispatch_boost_exposure", "allocate_promo_stock"}
+        assert set(public_tools) == {"get_hot_rank", "dispatch_boost_exposure", "allocate_promo_stock", "schedule_close_order"}
 
     def test_dispatch_always_goes_through_call_tool(self):
         """Every dispatch goes through call_tool which hits the gateway (interceptor chain)."""

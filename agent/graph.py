@@ -55,6 +55,8 @@ def decide(state: AgentState) -> AgentState:
 
 def dispatch(state: AgentState) -> AgentState:
     """Send boost command via MCP dispatch_boost_exposure tool."""
+    from preflight import preflight_check_boost, on_dispatch_result
+
     decision = state.get("decision")
     if decision is None:
         return {"dispatched_cmd": None}
@@ -64,6 +66,13 @@ def dispatch(state: AgentState) -> AgentState:
     region = state.get("region", "CN")
     risk_tier = decision.get("risk_tier", "standard")
 
+    # Agent self-check (Level 1)
+    check = preflight_check_boost(decision["weight"], region)
+    if not check.passed:
+        on_dispatch_result(False, check.reason)
+        return {"dispatched_cmd": {"target": target, "weight": decision["weight"], "sent": False,
+                                   "error": "[preflight] " + check.reason}}
+
     try:
         result = dispatch_boost_exposure(
             target_content_id=content_id,
@@ -72,8 +81,11 @@ def dispatch(state: AgentState) -> AgentState:
             decision_source="agent",
             risk_tier=risk_tier,
         )
+        accepted = result.get("Accepted", result.get("accepted", False))
+        on_dispatch_result(accepted, result.get("Reason", result.get("reason", "")))
         return {"dispatched_cmd": {"target": target, "weight": decision["weight"], "sent": True, "result": result}}
     except Exception as e:
+        on_dispatch_result(False, str(e))
         return {"dispatched_cmd": {"target": target, "weight": decision["weight"], "sent": False, "error": str(e)}}
 
 

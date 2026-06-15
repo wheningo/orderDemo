@@ -1,7 +1,12 @@
 """Tests for inventory allocation agent loop."""
 
 from unittest.mock import patch
+from preflight import PreflightResult
 from inventory_graph import InventoryState, get_compiled_inventory_graph, observe, decide, dispatch, verify
+
+
+def _patch_preflight_pass():
+    return patch("preflight.preflight_check_inventory", return_value=PreflightResult.ok())
 
 
 def test_decide_keeps_qty_on_first_attempt():
@@ -69,7 +74,8 @@ def test_full_graph_oversell_then_backoff_succeed():
             return {"accepted": False, "reason": f"Oversell rejected: sku=SKU-1, requested={qty}, available=100", "retryable": False}
         return {"accepted": True, "reason": "", "retryable": False}
 
-    with patch("inventory_graph.allocate_promo_stock", side_effect=mock_allocate):
+    with _patch_preflight_pass(), \
+         patch("inventory_graph.allocate_promo_stock", side_effect=mock_allocate):
         graph = get_compiled_inventory_graph()
         result = graph.invoke({"sku": "SKU-1", "qty": 300, "region": "CN"})
 
@@ -91,7 +97,8 @@ def test_full_graph_retryable_conflict_same_qty():
             return {"accepted": False, "reason": "Concurrent conflict", "retryable": True}
         return {"accepted": True, "reason": "", "retryable": False}
 
-    with patch("inventory_graph.allocate_promo_stock", side_effect=mock_allocate):
+    with _patch_preflight_pass(), \
+         patch("inventory_graph.allocate_promo_stock", side_effect=mock_allocate):
         graph = get_compiled_inventory_graph()
         result = graph.invoke({"sku": "SKU-1", "qty": 30, "region": "CN"})
 
